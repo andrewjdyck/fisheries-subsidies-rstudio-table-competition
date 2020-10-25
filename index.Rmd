@@ -7,6 +7,8 @@ highlight: null
 self_contained: false
 editor_options: 
   chunk_output_type: inline
+date: "2020-10-25"
+author: "Andrew J. Dyck"
 ---
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
@@ -16,26 +18,32 @@ library(kableExtra)
 library(formattable)
 ```
 
-```{r, echo=FALSE}
-sub_countries <- jsonlite::fromJSON('http://api.openfisheries.org/subsidies/subsidy_country_totals.json')
+## Collect data (subsidies and landings)
+```{r, message=FALSE}
+# Start with subsidies for top 10 countries
+subsidies <- jsonlite::fromJSON('http://api.openfisheries.org/subsidies/subsidy_country_totals.json') %>%
+  arrange(-Subsidy) %>%
+  head(10)
 
-# add in landings
-c10 <- c('CHN', 'USA', 'KOR', 'JPN', 'RUS', 'THA', 'IDN', 'CAN', 'NOR', 'ESP')
-l10 <- sapply(c10, function(x) rfisheries::of_landings(country=x) %>% filter(year == 2018) %>% select(catch)) %>% unlist()
-c10_df <- data.frame(
-  iso3c = c10,
-  landings = l10
+# Collect landings data
+landings_dta <- sapply(subsidies$iso3c, function(x) rfisheries::of_landings(country=x) %>% filter(year == 2018) %>% select(catch)) %>% unlist()
+
+total_catch <- data.frame(
+  iso3c = subsidies$iso3c,
+  landings = landings_dta
 )
 
-tbl <- sub_countries %>% 
-  arrange(desc(Subsidy)) %>% head(10) %>%
-  left_join(c10_df) %>%
+tbl <- subsidies %>% 
+  # arrange(desc(Subsidy)) %>% head(10) %>%
+  left_join(total_catch) %>%
   mutate(spkg = formattable::currency(round(Subsidy/landings/1000,2))) %>%
   select(-iso3c) %>%
   mutate(Subsidy = formattable::currency(round(Subsidy/1000000,0), digits=0)) %>%
   mutate(landings = formattable::accounting(round(landings/1000, 2), digits=0))
+```
 
-
+## Format output table
+```{r, message=FALSE}
 kbl(tbl, col.names = c('Country', paste0('Subsidies (USD Millions)', footnote_marker_alphabet(1)), paste0('Landings (Million kg)', footnote_marker_alphabet(2)), 'Subsidy per kg'), escape = FALSE) %>%
   kable_paper("striped", full_width = F) %>%
   column_spec(2, bold = T) %>%
@@ -44,5 +52,4 @@ kbl(tbl, col.names = c('Country', paste0('Subsidies (USD Millions)', footnote_ma
     general = "Top 10 fishing countries by total government subsidies for the fishing industry. Korea and Canada highlighted as the only countries subsidizing more than $1/kg of fish landed.",
     alphabet = c("Source: https://doi.org/10.1016/j.dib.2019.104706", "Source: http://www.openfisheries.org/")
     )
-
 ```
